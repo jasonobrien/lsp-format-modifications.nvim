@@ -168,24 +168,33 @@ function HgClient:file_info(pathstr)
     command = 'hg',
     cwd = self.repository_root,
     args = {
-      'files',
-      '--',
+      "status", "-cmau",
+      "--no-copies",
+      "--",
       self:relativize(pathstr)
     }
   }
 
   if result.exitcode ~= 0 then
-    return { is_tracked = false }
+    return nil, "failed to get file information for " .. pathstr
   end
 
-  local file_info = {}
-  file_info.is_tracked = #result.stdout > 0
-  local line = result.stdout[1]
-  file_info.i_crlf = true -- TODO
-  file_info.w_crlf = true -- TODO
-  file_info.relpath = vim.trim(line)
-  file_info.mode_bits = '100644' -- TODO
-  file_info.object_name = vim.trim(line)
+  local file_info = {
+    is_tracked = false,
+    -- TODO: file details
+    i_crlf = true,
+    w_crlf = true,
+    mode_bits = '100644',
+  }
+  for _, line in ipairs(result.stdout) do
+    if not line:find("^ +#") and line ~= "" then
+      local status = string.sub(line, 1, 1)
+      file_info.relpath = string.sub(line, 3, -1)
+      file_info.object_name = file_info.relpath
+      file_info.is_tracked = status ~= "A" and status ~= "?"
+      break
+    end
+  end
 
   return file_info
 end
