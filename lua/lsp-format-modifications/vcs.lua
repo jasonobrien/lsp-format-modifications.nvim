@@ -163,7 +163,39 @@ function HgClient:relativize(pathstr)
   return absolute_pathstr:sub(#self.repository_root + #Path.path.sep + 1)
 end
 
+function HgClient:conflicts(pathstr)
+  local result = cmd{
+    command = "hg",
+    cwd = self.repository_root,
+    args = {
+      "resolve", "-l",
+      "--",
+      self:relativize(pathstr)
+    }
+  }
+
+  if result.exitcode ~= 0 then
+    return nil, "failed to get conflicts for " .. pathstr
+  end
+
+  local conflicts = {}
+  for _, line in ipairs(result.stdout) do
+    if not line:find("^ *#") and line ~= "" then
+      if string.sub(line, 1, 1) == "U" then
+        conflicts[string.sub(line, 3, -1)] = true
+      end
+    end
+  end
+
+  return conflicts
+end
+
 function HgClient:file_info(pathstr)
+  local conflicts, err = self:conflicts(pathstr)
+  if err then
+      return nil, err
+  end
+
   local result = cmd {
     command = 'hg',
     cwd = self.repository_root,
@@ -192,6 +224,7 @@ function HgClient:file_info(pathstr)
       file_info.relpath = string.sub(line, 3, -1)
       file_info.object_name = file_info.relpath
       file_info.is_tracked = status ~= "A" and status ~= "?"
+      file_info.has_conflicts = conflicts[file_info.relpath]
       break
     end
   end
